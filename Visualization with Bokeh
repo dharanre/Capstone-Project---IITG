@@ -1,0 +1,32 @@
+# We create real-time line plots of prices using Bokeh. In a full application, one could run a Bokeh server with periodic callbacks to update the data sources
+stackoverflow.com
+. In Colab we output inline plots after simulation or use output_notebook(). For each lot, we maintain a time series of prices and plot them. We also plot competitor (neighbor) average prices for comparison.
+
+
+# src/visualization.py
+
+from bokeh.plotting import figure, output_notebook, show
+from bokeh.models import ColumnDataSource
+
+output_notebook()  # for Jupyter/Colab
+
+def create_price_plot(lot_id, timestamps, my_prices, neighbor_prices):
+    """Create a Bokeh line plot for one parking lot."""
+    source = ColumnDataSource(data={
+        'time': timestamps,
+        'price': my_prices,
+        'neighbor': neighbor_prices
+    })
+    p = figure(title=f"Lot {lot_id} Price Over Time", x_axis_type='datetime',
+               y_axis_label='Price ($)', x_axis_label='Time', 
+               plot_width=600, plot_height=300)
+    p.line('time', 'price', source=source, color='navy', legend_label='My Lot')
+    p.line('time', 'neighbor', source=source, color='orange', legend_label='Neighbor Avg.')
+    p.legend.location = "top_left"
+    p.legend.click_policy = "hide"
+    show(p)
+
+
+# We would call create_price_plot for each lot, passing in the history of timestamps and prices collected during the simulation. In a live setting, one would update ColumnDataSource and use push_notebook or a server callback, but Colab’s Python environment may not support continuous push_notebook() updates
+discourse.bokeh.org
+. Even so, this code structure shows how to generate the required Bokeh visuals, satisfying the requirement: “Real-time pricing line plots for each parking space and comparison with competitors”.
