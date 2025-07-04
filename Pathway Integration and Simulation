@@ -1,0 +1,46 @@
+# With the data stream and models in place, we wire them into Pathway’s real-time pipeline. In streaming mode, Pathway continuously processes incoming events. We can apply pricing logic per event using Pathway expressions or by calling our model functions inside a transformation. For clarity, we demonstrate a simple approach:
+
+
+
+# src/simulation.py (continued)
+
+# For this example, we will accumulate prices in a Python dict (not in Pathway).
+# In production, one could use Pathway stateful reducers for iterative updates.
+lot_prices = {lot: BASE_PRICE for lot in df['SystemCodeNumber'].unique()}
+lot_coords = {row.SystemCodeNumber: (row.Latitude, row.Longitude) 
+              for _, row in df.drop_duplicates('SystemCodeNumber').iterrows()}
+
+# Process each event in Pathway streaming mode
+def on_event(batch):
+    """Callback: Apply pricing logic to each batch of events."""
+    events_df = batch.to_pandas()  # Convert incoming batch to Pandas DataFrame
+    # Iterate through rows (events) in time order
+    for _, event in events_df.iterrows():
+        lot = event.SystemCodeNumber
+        occ = event.Occupancy
+        cap = event.Capacity
+        queue_len = event.QueueLength
+        traffic = event.TrafficLevelNum
+        special = event.IsSpecialDay
+        veh_wt = event.VehicleTypeWeight
+        prev_price = lot_prices.get(lot, BASE_PRICE)
+
+        # Model 1 price update
+        price1 = update_price_baseline(prev_price, occ, cap)
+        # Model 2 demand-based
+        demand = compute_demand(occ, cap, queue_len, traffic, special, veh_wt)
+        price2 = update_price_demand(demand)
+        # (Optional) Model 3 competitive adjustment
+        price3 = adjust_price_competitive(lot, occ, cap, price2, lot_prices, lot_coords)
+
+        # For this demo, we record Model 2 (most advanced) as the "current" price
+        lot_prices[lot] = price2
+
+        # (Visualization hook: update plots with price1, price2, price3 here)
+        # For brevity, we omit plotting code in this callback.
+
+# Use Pathway’s output to repeatedly call our Python handler
+output = events.map_batches(on_event)
+pw.run()
+
+
