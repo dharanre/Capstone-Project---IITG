@@ -1,0 +1,101 @@
+# We implement each model in a separate function. Default parameters (alpha, beta, gamma, ...) are defined at the top so users can easily adjust them.
+
+
+# src/pricing_models.py
+
+import numpy as np
+
+# -- Model parameters (can be tuned) --
+ALPHA = 0.1     # for baseline model
+BETA = 0.5      # queue length weight
+GAMMA = 0.3     # traffic weight (subtracted)
+DELTA = 2.0     # special day bump
+EPSILON = 1.0   # vehicle type weight
+LAMBDA = 0.5    # scaling for demand into price
+BASE_PRICE = 10.0
+
+def update_price_baseline(prev_price, occupancy, capacity, alpha=ALPHA):
+    """Model 1: Baseline linear update (smooth increment by occupancy rate)."""
+    return prev_price + alpha * (occupancy / capacity)
+
+def compute_demand(occupancy, capacity, queue_length, traffic_level, is_special_day, vehicle_weight,
+                   alpha=ALPHA, beta=BETA, gamma=GAMMA, delta=DELTA, epsilon=EPSILON):
+    """
+    Model 2: Calculate a demand score from features.
+    Example: α*(Occupancy/Capacity) + β*QueueLength - γ*Traffic + δ*IsSpecialDay + ε*VehicleWeight.
+    """
+    occ_rate = occupancy / capacity
+    demand = (alpha * occ_rate +
+              beta * queue_length -
+              gamma * traffic_level +
+              delta * is_special_day +
+              epsilon * vehicle_weight)
+    return demand
+
+def update_price_demand(demand, base_price=BASE_PRICE, lam=LAMBDA):
+    """
+    Model 2: Price update from demand.
+    price = base_price * (1 + λ * normalized_demand)
+    Bound price to [0.5*base_price, 2.0*base_price].
+    """
+    # Normalize demand to roughly [-1, 1] for stability (simple approach)
+    # Here we assume demand is not too large; for a real system compute min/max over history.
+    demand_norm = np.tanh(demand)  # smooth normalization
+    price = base_price * (1 + lam * demand_norm)
+    # Bound price (0.5x to 2x base)
+    price_clamped = np.clip(price, 0.5 * base_price, 2.0 * base_price)
+    return price_clamped
+
+def adjust_price_competitive(lot_id, occupancy, capacity, my_price, all_prices, lot_coords, neighbor_radius=0.5):
+    """
+    Model 3 (optional): Competitive adjustment.
+    If lot full and neighbors cheaper -> consider rerouting (lower price).
+    If neighbors expensive -> increase price.
+    `all_prices` is a dict {lot_id: price}, `lot_coords` is {lot_id: (lat,lon)}.
+    """
+    import math
+    def haversine(coord1, coord2):
+        # Rough distance in kilometers
+        lat1, lon1 = coord1; lat2, lon2 = coord2
+        # Earth radius ~6371 km
+        phi1 = math.radians(lat1); phi2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+        a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+        return 6371 * (2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)))
+    # Find nearby lot prices
+    my_coord = lot_coords.get(lot_id)
+    if my_coord is None:
+        return my_price  # No location data
+    neighbors = []
+    for other_id, price in all_prices.items():
+        if other_id == lot_id: continue
+        other_coord = lot_coords.get(other_id)
+        if other_coord is None: continue
+        dist = haversine(my_coord, other_coord)
+        if dist <= neighbor_radius:
+            neighbors.append(price)
+    if not neighbors:
+        return my_price
+    avg_neighbor_price = sum(neighbors) / len(neighbors)
+    # Adjust price based on occupancy
+    if occupancy >= capacity:
+        # If full and neighbors are cheaper, lower price to encourage leaving
+        if avg_neighbor_price < my_price:
+            return max(0.5 * BASE_PRICE, my_price * 0.9)
+        else:
+            # Neighbors expensive, raise ours modestly
+            return min(2.0 * BASE_PRICE, my_price * 1.1)
+    else:
+        # If not full, maybe adjust up if competitors are expensive
+        if avg_neighbor_price > my_price:
+            return min(2.0 * BASE_PRICE, my_price * 1.05)
+    return my_price  # default: no change
+
+
+
+
+
+# Model 1 (Baseline) simply increments price by α * (occupancy/capacity) each time step.
+# Model 2 (Demand-based) computes a linear demand from features and sets price = base * (1 + λ * normalized_demand). We normalize the demand via tanh and clamp the final price between 0.5× and 2× the base. Default parameters (α, β, γ, etc.) are top-level constants that users can tweak.
+# Model 3 (Competitive, optional) uses the lot’s latitude/longitude to find neighbors (within a radius), compares prices, and adjusts up or down. For simplicity we compute Haversine distance to define “nearby”. If the lot is full and nearby lots are cheaper, we slightly reduce our price (or suggest rerouting). If neighbors are pricier, we raise ours—mimicking real competition.
