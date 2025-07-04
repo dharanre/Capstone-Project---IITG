@@ -1,0 +1,21 @@
+#We begin by loading the dataset with Pandas and performing any necessary preprocessing. The dataset has fields like Occupancy, Capacity, QueueLength, TrafficConditionNearby (categorical: “low/medium/high”), IsSpecialDay (0/1), VehicleType (car/bike/truck), and geographic coordinates. We convert categorical fields to numeric weights and parse dates if needed.
+
+# src/data_utils.py
+
+import pandas as pd
+
+def load_parking_data(csv_path):
+    """Load and preprocess parking lot data from CSV."""
+    df = pd.read_csv(csv_path)
+    # Map traffic conditions to numeric values (higher number = more congestion)
+    traffic_map = {'low': 0.5, 'medium': 1.0, 'high': 1.5}
+    df['TrafficLevelNum'] = df['TrafficConditionNearby'].map(traffic_map).fillna(1.0)
+    # Map vehicle types to weight (e.g., trucks impose higher demand)
+    vehicle_map = {'car': 1.0, 'bike': 0.5, 'truck': 1.5}
+    df['VehicleTypeWeight'] = df['VehicleType'].map(vehicle_map).fillna(1.0)
+    # Combine date and time if needed (for replay with timestamps)
+    df['Timestamp'] = pd.to_datetime(df['LastUpdatedDate'] + ' ' + df['LastUpdatedTime'],
+                                     format='%d-%m-%Y %H:%M:%S')
+    # Sort by time for realistic streaming order
+    df.sort_values('Timestamp', inplace=True)
+    return df
