@@ -33,14 +33,4 @@ This project aims to solve that using:
 ---
 
 ## 🧱 Architecture Diagram
-
-```mermaid
-flowchart TD
-  A[dataset.csv (historical + streaming data)] --> B[Pathway Stream Engine]
-  B --> C[Feature Engineering<br>(occupancy, queue, traffic, etc)]
-  C --> D{Pricing Models}
-  D --> D1[Model 1:<br>Baseline Linear]
-  D --> D2[Model 2:<br>Demand-Based]
-  D --> D3[Model 3:<br>Competitive (optional)]
-  D --> E[Pricing Output (per lot)]
-  E --> F[Bokeh Visualizer (Real-time Plots)]
+`diagrams/Dynamic Urban Parking Pricing System.png`
