@@ -1,0 +1,30 @@
+# We use Pathway’s demo module to replay the static CSV as a streaming source. Pathway allows streaming mode processing, treating each row as a real-time event
+pathway.com
+. We define a schema matching the CSV columns and start a streaming table from the CSV:
+
+
+# src/simulation.py
+
+import pathway as pw
+from pricing_models import apply_pricing_models
+
+class ParkingEvent(pw.Schema):
+    """Schema for a parking lot event (one time step for one lot)."""
+    SystemCodeNumber: str
+    Capacity: int
+    Latitude: float
+    Longitude: float
+    Occupancy: int
+    VehicleTypeWeight: float
+    TrafficLevelNum: float
+    QueueLength: int
+    IsSpecialDay: int
+    Timestamp: float  # We use epoch float for simplicity
+
+# Read the CSV with Pathway in streaming mode (using demo.replay_csv)
+events = pw.demo.replay_csv(
+    path='data/dataset.csv',
+    schema=ParkingEvent,
+    input_rate=1.0  # rows per second (adjust as needed)
+)
+
